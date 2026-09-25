@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  name             String?
+  emailVerified    Boolean  @default(false)
+  verificationToken String?
+  resetToken       String?
+  resetExpires     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  members          OrganizationMember[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   OrganizationMember[]
+  workspaces Workspace[]
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String   @default("member") // owner | admin | member | viewer
+  createdAt      DateTime @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([userId, organizationId])
+}
+
+model Workspace {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  website        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  services       WorkspaceService[]
+  configurations ServiceConfiguration[]
+  credentials    ServiceCredential[]
+  integrations   IntegrationConnection[]
+  seoSites       SeoSite[]
+  @@unique([organizationId, slug])
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String
+  category    String
+  icon        String  @default("box")
+  status      String  @default("coming_soon") // coming_soon | beta | active | deprecated
+  enabled     Boolean @default(true)
+  features    String  @default("{}")
+  workspaces  WorkspaceService[]
+}
+
+model WorkspaceService {
+  id          String   @id @default(cuid())
+  workspaceId String
+  serviceId   String
+  status      String   @default("enabled")
+  createdAt   DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  service     Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, serviceId])
+}
+
+model ServiceConfiguration {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  serviceId     String
+  configuration String   @default("{}")
+  status        String   @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, serviceId])
+}
+
+model ServiceCredential {
+  id          String   @id @default(cuid())
+  workspaceId String
+  serviceId   String
+  provider    String
+  reference   String
+  createdAt   DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Integration {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  provider    String
+  description String
+  connections IntegrationConnection[]
+}
+
+model IntegrationConnection {
+  id          String   @id @default(cuid())
+  workspaceId String
+  integrationId String
+  status      String   @default("connected")
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+  user      User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Subscription {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  plan           String   @default("free")
+  status         String   @default("active")
+  usage          String   @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─── SEO service (first live module) ─────────────────────────────
+// Evidence-first model: every issue links to observed facts.
+// UNKNOWN is a first-class result — never claim without data.
+
+model SeoSite {
+  id          String   @id @default(cuid())
+  workspaceId String
+  domain      String
+  url         String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audits      SeoAudit[]
+  profiles    SeoBusinessProfile[]
+  @@unique([workspaceId, domain])
+}
+
+model SeoBusinessProfile {
+  id        String   @id @default(cuid())
+  siteId    String
+  version   Int      @default(1)
+  profile   String   @default("{}")
+  source    String   @default("user")
+  createdAt DateTime @default(now())
+  site      SeoSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model SeoAudit {
+  id         String   @id @default(cuid())
+  siteId     String
+  status     String   @default("complete") // running | complete | failed
+  health     Int?
+  stats      String   @default("{}")
+  agents     String   @default("[]")
+  error      String?
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  site       SeoSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pages      SeoPage[]
+  issues     SeoIssue[]
+}
+
+model SeoPage {
+  id          String  @id @default(cuid())
+  auditId     String
+  url         String
+  finalUrl    String
+  statusCode  Int
+  title       String?
+  wordCount   Int     @default(0)
+  loadMs      Int     @default(0)
+  facts       String  @default("{}")
+  audit       SeoAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  issues      SeoIssue[]
+}
+
+model SeoIssue {
+  id             String  @id @default(cuid())
+  auditId        String
+  pageId         String?
+  ruleId         String
+  category       String
+  severity       String  // critical | high | medium | low | info
+  status         String  // fail | warning | unknown
+  message        String
+  evidence       String  @default("{}")
+  recommendation String
+  createdAt      DateTime @default(now())
+  audit          SeoAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  page           SeoPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+}
